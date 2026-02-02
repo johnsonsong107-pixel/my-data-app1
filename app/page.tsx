@@ -24,7 +24,7 @@ export default function MarketAnalysisPlatform() {
     <div className="p-8 max-w-7xl mx-auto">
       <div className="flex justify-between items-end mb-10">
         <div>
-          <h1 className="text-3xl font-bold text-slate-900">汉桑市场数据分析平台</h1>
+          <h1 className="text-3xl font-bold text-slate-900">市场数据分析平台</h1>
           <p className="text-slate-500 mt-2">管理和分析市场数据</p>
         </div>
         <button className="bg-black text-white px-5 py-2.5 rounded-lg flex items-center gap-2 hover:bg-slate-800 transition">
