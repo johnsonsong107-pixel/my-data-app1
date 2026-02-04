@@ -2,274 +2,302 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { createClient } from '@supabase/supabase-js';
 import { 
-  Plus, Database, Trash2, ChevronLeft, Settings, Edit3, X, BarChart3, 
-  Table, Play, Save, FileText, Layout, Search, Filter, FolderTree, 
-  TrendingUp, Calculator, DollarSign, Target, ChevronRight, Menu
+  Plus, Database, Trash2, ChevronLeft, Settings, Search, Filter, 
+  TrendingUp, Calculator, DollarSign, Target, ChevronRight, 
+  BarChart3, LineChart, FileText, Layout, PieChart as PieIcon,
+  Layers, ArrowUpRight, CheckCircle, Edit, Trash, Save, Play
 } from 'lucide-react';
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
+import { 
+  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, 
+  ResponsiveContainer, LineChart as ReLine, Line, Cell,
+  PieChart as RePie, Pie
+} from 'recharts';
 
-// --- 配置云端连接 ---
+// --- Supabase 配置 ---
 const supabaseUrl = 'https://cwjpyqyknllirbydahxl.supabase.co';
-const supabaseKey = 'sb_secret_ifUnQwUmABOku2N9ShmgTQ_9ar2HBJ3';
+const supabaseKey = 'sb_secret_ifUnQwUmABOku2N9ShmgTQ_9ar2HBJ3'; // 替换为你的实际 Key
 const supabase = createClient(supabaseUrl, supabaseKey);
 
 export default function HansangUltimateSystem() {
-  // 核心路由与状态
-  const [activeProject, setActiveProject] = useState('电竞类电脑多媒体音箱');
-  const [view, setView] = useState<'analytics' | 'finance' | 'dataManage' | 'input'>('analytics');
+  // --- 状态管理 ---
+  const [activeView, setActiveView] = useState<'analytics' | 'project' | 'input' | 'manage'>('analytics');
   const [activeTab, setActiveTab] = useState('市场大盘');
-  const [marketData, setMarketData] = useState<any[]>([]);
-  const [selectedIds, setSelectedIds] = useState<number[]>([]);
-  const [loading, setLoading] = useState(false);
+  const [activeProject, setActiveProject] = useState('电竞类电脑多媒体音箱');
+  const [summaryView, setSummaryView] = useState<'category' | 'price'>('category');
+  
+  // 核心数据状态
+  const [categories, setCategories] = useState(['一体式', '分体式', '回音壁', '便携式']);
+  const [rawText, setRawText] = useState('');
+  const [parsedData, setParsedData] = useState<any[]>([]);
 
-  // 财务模型数据 (精准对应《项目管理-查看项目.png》)
-  const [finance, setFinance] = useState({
+  // 财务决策模型状态 (精准复刻)
+  const [fm, setFm] = useState({
     taoSales: 149655,
-    taoPercent: 30,
-    share: 5,
-    unitPrice: 1000,
+    taoShare: 30,
+    projectShare: 5,
+    price: 1000,
     lifecycle: 36,
-    bomCost: 350,
-    mouldFee: 500000,
-    fixtureFee: 200000,
-    rdStaffFee: 1000000,
-    rdMaterialFee: 200000,
-    opExRate: 15
+    bom: 400,
+    mfgType: 'ratio' as 'ratio' | 'fixed', 
+    mfgVal: 10, // 比例或固定金额
+    opexRate: 15,
+    taxRate: 25,
+    investment: 1500000
   });
 
-  // 实时财务计算表达式
-  const calc = useMemo(() => {
-    const totalMarket = finance.taoSales / (finance.taoPercent / 100);
-    const projectTotalQty = totalMarket * (finance.share / 100);
-    const totalRevenue = projectTotalQty * finance.unitPrice;
-    const totalInvestment = finance.mouldFee + finance.fixtureFee + finance.rdStaffFee + finance.rdMaterialFee;
-    const totalOpEx = totalRevenue * (finance.opExRate / 100);
-    const totalBom = projectTotalQty * finance.bomCost;
+  // --- 1. 自动解析逻辑 (核心算法) ---
+  const processRawData = () => {
+    const lines = rawText.split('\n');
+    const newItems = lines.map((line, index) => {
+      const parseValue = (val: string) => {
+        if (val.includes('~')) {
+          const parts = val.split('~').map(p => parseValue(p));
+          return (parts[0] + parts[1]) / 2;
+        }
+        let num = parseFloat(val.replace(/,/g, '').replace(/[^\d.]/g, ''));
+        if (val.includes('万')) num *= 10000;
+        return num || 0;
+      };
+
+      // 简单模拟解析匹配，实际应用可根据生意参谋格式增强
+      return {
+        id: Date.now() + index,
+        title: line.split('\t')[0] || '未知商品',
+        price: parseValue(line.match(/\d+~\d+|\d+元/)?.[0] || '0'),
+        buyers: parseValue(line.match(/[\d.]+万|[\d,]+/)?.[0] || '0'),
+        category: categories[0]
+      };
+    });
+    setParsedData([...parsedData, ...newItems]);
+    setActiveView('analytics');
+  };
+
+  // --- 2. 财务核心计算 (JS表达式绑定) ---
+  const finance = useMemo(() => {
+    const totalMarketTao = fm.taoSales;
+    const totalMarketEst = fm.taoSales / (fm.taoShare / 100);
+    const totalQtyLC = totalMarketEst * (fm.projectShare / 100);
+    const annualQty = totalQtyLC / (fm.lifecycle / 12);
+    const totalRev = totalQtyLC * fm.price;
     
-    const netProfit = totalRevenue - totalBom - totalOpEx - totalInvestment;
-    const netMargin = (netProfit / totalRevenue) * 100;
-    const grossMargin = ((finance.unitPrice - finance.bomCost) / finance.unitPrice) * 100;
+    const mfgCost = fm.mfgType === 'ratio' ? fm.bom * (fm.mfgVal / 100) : fm.mfgVal;
+    const uvc = fm.bom + mfgCost;
+    const unitInvest = fm.investment / totalQtyLC;
+    const unitOpex = fm.price * (fm.opexRate / 100);
+    
+    const unitGross = fm.price - uvc;
+    const grossRate = (unitGross / fm.price) * 100;
+    
+    const preTax = unitGross - unitInvest - unitOpex;
+    const tax = preTax > 0 ? preTax * (fm.taxRate / 100) : 0;
+    const unitNet = preTax - tax;
+    const netRate = (unitNet / fm.price) * 100;
 
-    return {
-      totalMarket: Math.round(totalMarket),
-      projectQty: Math.round(projectTotalQty),
-      revenue: totalRevenue.toLocaleString(),
-      grossMargin: grossMargin.toFixed(2),
-      netMargin: netMargin.toFixed(2),
-      investment: totalInvestment.toLocaleString()
-    };
-  }, [finance]);
+    return { totalMarketEst, totalQtyLC, annualQty, totalRev, unitGross, grossRate, unitNet, netRate, uvc, unitInvest, unitOpex, preTax };
+  }, [fm]);
 
-  // --- 视图组件：左侧导航栏 ---
-  const Sidebar = () => (
-    <aside className="w-64 bg-white border-r border-slate-200 flex flex-col h-screen sticky top-0">
-      <div className="p-6 border-b">
-        <h1 className="text-xl font-black italic tracking-tighter text-slate-900">HANSANG <span className="text-blue-600 font-normal">AI</span></h1>
-      </div>
-      <div className="flex-1 overflow-y-auto p-4 space-y-2">
-        <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest px-2 mb-4">我的项目库</p>
-        {['电竞类电脑多媒体音箱', '黑胶唱片机', 'AI智能耳机', '蓝牙外设', '歌词音箱'].map(item => (
-          <button 
-            key={item}
-            onClick={() => setActiveProject(item)}
-            className={`w-full text-left px-4 py-3 rounded-xl text-sm font-bold transition-all flex items-center justify-between group ${activeProject === item ? 'bg-slate-900 text-white shadow-lg' : 'text-slate-500 hover:bg-slate-50'}`}
-          >
-            {item}
-            <ChevronRight size={14} className={activeProject === item ? 'opacity-100' : 'opacity-0'} />
-          </button>
-        ))}
-      </div>
-      <div className="p-4 border-t">
-        <button onClick={() => setView('input')} className="w-full bg-blue-600 text-white py-3 rounded-xl font-bold text-sm flex items-center justify-center gap-2 hover:bg-blue-700 transition shadow-lg shadow-blue-100">
-          <Plus size={18} /> 录入新数据
-        </button>
-      </div>
-    </aside>
-  );
+  // --- 3. Supabase 数据持久化 ---
+  const saveToCloud = async () => {
+    const { error } = await supabase.from('projects').upsert({
+      project_name: activeProject,
+      finance_config: fm,
+      updated_at: new Date()
+    });
+    if (!error) alert("数据已同步至 Supabase 云端");
+  };
 
-  // --- 视图组件：市场分析 (Tab 切换) ---
-  const AnalyticsView = () => (
-    <div className="space-y-6 animate-in fade-in duration-500">
-      {/* 顶部筛选条 - 还原截图布局 */}
-      <div className="bg-white p-4 rounded-2xl border border-slate-100 shadow-sm flex gap-4 items-end overflow-x-auto">
-        {['开始月份', '结束月份', '价格区间', '细分品类'].map(label => (
-          <div key={label} className="min-w-[140px]">
-            <label className="text-[10px] font-black text-slate-400 uppercase mb-1.5 block">{label}</label>
-            <div className="bg-slate-50 border border-slate-100 rounded-lg p-2 text-xs font-bold text-slate-600 flex justify-between items-center cursor-pointer">
-              全部 <Filter size={12}/>
-            </div>
-          </div>
-        ))}
-      </div>
-
-      {/* 走势图块 - 还原同比增长绿色/红色块 */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <div className="lg:col-span-2 bg-white p-8 rounded-[2.5rem] border border-slate-100 shadow-sm relative overflow-hidden">
-          <div className="flex justify-between items-center mb-8">
-            <h3 className="font-bold text-slate-800">市场大盘走势</h3>
-            <div className="flex gap-2"><span className="w-3 h-3 bg-blue-600 rounded-full"></span><span className="text-[10px] font-bold text-slate-400">销售额</span></div>
-          </div>
-          <div className="h-64">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={[{m:'1月', v:400}, {m:'2月', v:700}, {m:'3月', v:500}, {m:'4月', v:900}]}>
-                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
-                <XAxis dataKey="m" axisLine={false} tickLine={false} tick={{fontSize:10}} />
-                <Bar dataKey="v" fill="#2563eb" radius={[6, 6, 0, 0]} />
-              </BarChart>
-            </ResponsiveContainer>
-          </div>
-        </div>
-        <div className="bg-green-500 p-8 rounded-[2.5rem] text-white flex flex-col justify-between shadow-xl shadow-green-100">
-           <p className="text-[10px] font-black uppercase opacity-80 tracking-widest">同比增长率 (YoY)</p>
-           <div className="text-6xl font-black italic tracking-tighter">+29.1%</div>
-           <div className="bg-white/20 p-4 rounded-2xl backdrop-blur-sm">
-              <p className="text-[10px] font-bold opacity-80">本周期总销售额</p>
-              <p className="text-xl font-bold">¥ 45,892.4 万</p>
-           </div>
-        </div>
-      </div>
-    </div>
-  );
-
-  // --- 视图组件：财务决策 (财务公式绑定) ---
-  const FinanceView = () => (
-    <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 animate-in slide-in-from-right-4">
-      {/* 左侧输入参数 */}
-      <div className="lg:col-span-7 space-y-6">
-        <div className="bg-white p-8 rounded-[2.5rem] border border-slate-100 shadow-sm">
-          <h3 className="font-black text-slate-800 mb-8 flex items-center gap-2 text-lg"><Target className="text-blue-600" size={24}/> 市场预估配置</h3>
-          <div className="grid grid-cols-2 gap-6">
-            <div>
-              <label className="text-[10px] font-black text-slate-400 uppercase mb-2 block">预计市场占有率 (%)</label>
-              <input type="number" value={finance.share} onChange={e=>setFinance({...finance, share:Number(e.target.value)})} className="w-full bg-slate-50 border-none rounded-xl p-4 font-bold outline-none ring-offset-2 focus:ring-2 ring-blue-500/20" />
-            </div>
-            <div>
-              <label className="text-[10px] font-black text-slate-400 uppercase mb-2 block">单台建议售价 (元)</label>
-              <input type="number" value={finance.unitPrice} onChange={e=>setFinance({...finance, unitPrice:Number(e.target.value)})} className="w-full bg-slate-50 border-none rounded-xl p-4 font-bold outline-none ring-offset-2 focus:ring-2 ring-blue-500/20" />
-            </div>
-            <div>
-              <label className="text-[10px] font-black text-slate-400 uppercase mb-2 block">BOM 目标成本 (元)</label>
-              <input type="number" value={finance.bomCost} onChange={e=>setFinance({...finance, bomCost:Number(e.target.value)})} className="w-full bg-slate-50 border-none rounded-xl p-4 font-bold text-red-600 outline-none ring-offset-2 focus:ring-2 ring-blue-500/20" />
-            </div>
-            <div>
-              <label className="text-[10px] font-black text-slate-400 uppercase mb-2 block">运营费率 (%)</label>
-              <input type="number" value={finance.opExRate} onChange={e=>setFinance({...finance, opExRate:Number(e.target.value)})} className="w-full bg-slate-50 border-none rounded-xl p-4 font-bold outline-none ring-offset-2 focus:ring-2 ring-blue-500/20" />
-            </div>
-          </div>
-        </div>
-
-        <div className="bg-white p-8 rounded-[2.5rem] border border-slate-100 shadow-sm">
-          <h3 className="font-black text-slate-800 mb-8 flex items-center gap-2 text-lg"><DollarSign className="text-blue-600" size={24}/> 投资预算 (CAPEX/OPEX)</h3>
-          <div className="grid grid-cols-2 gap-6">
-            <input placeholder="模具费" value={finance.mouldFee} className="bg-slate-50 p-4 rounded-xl border-none outline-none font-bold" />
-            <input placeholder="人工研发费" value={finance.rdStaffFee} className="bg-slate-50 p-4 rounded-xl border-none outline-none font-bold" />
-          </div>
-        </div>
-      </div>
-
-      {/* 右侧测算结果 - 黑色卡片还原 */}
-      <div className="lg:col-span-5">
-        <div className="bg-slate-900 text-white p-10 rounded-[3rem] shadow-2xl sticky top-24">
-           <h3 className="text-xl font-black mb-10 flex justify-between items-center border-b border-white/10 pb-6">财务回收测算 <Calculator className="text-blue-500" /></h3>
-           <div className="space-y-6">
-              <div className="flex justify-between items-end"><span className="text-slate-400 text-xs font-bold uppercase">预估总销量</span><span className="text-2xl font-black italic">{calc.projectQty.toLocaleString()} <small className="text-[10px] opacity-40">台</small></span></div>
-              <div className="flex justify-between items-end"><span className="text-slate-400 text-xs font-bold uppercase">单台毛利(元)</span><span className="text-2xl font-black text-green-400">{finance.unitPrice - finance.bomCost}</span></div>
-              <div className="flex justify-between items-end"><span className="text-slate-400 text-xs font-bold uppercase">毛利率 (%)</span><span className="text-2xl font-black text-green-400">{calc.grossMargin}%</span></div>
-              <div className="bg-white/5 p-6 rounded-[2rem] border border-white/5">
-                <p className="text-slate-400 text-[10px] font-black uppercase tracking-widest mb-4">最终净利率预估 (Net Margin)</p>
-                <div className="text-7xl font-black italic tracking-tighter text-blue-500">{calc.netMargin}<span className="text-2xl">%</span></div>
-              </div>
-           </div>
-           <button onClick={() => alert('已成功保存至云端项目库')} className="w-full mt-10 bg-blue-600 text-white py-5 rounded-[1.5rem] font-black hover:bg-blue-700 transition shadow-xl shadow-blue-900/40">保存测算并更新项目</button>
-        </div>
-      </div>
-    </div>
-  );
-
-  // --- 视图组件：数据管理 (批量操作还原) ---
-  const DataManageView = () => (
-    <div className="bg-white rounded-[2.5rem] border border-slate-100 shadow-sm overflow-hidden animate-in slide-in-from-bottom-4">
-      <div className="p-8 border-b flex justify-between items-center bg-slate-50/30">
-        <div className="flex items-center gap-6">
-          <input type="checkbox" checked={selectedIds.length > 0} onChange={() => setSelectedIds(selectedIds.length > 0 ? [] : [1])} className="w-6 h-6 rounded-lg border-slate-300" />
-          <h2 className="text-xl font-black">原始数据中心 <span className="text-slate-300 font-normal ml-2">/ 共 1,248 条</span></h2>
-        </div>
-        <div className="flex gap-3">
-          {selectedIds.length > 0 && <button className="bg-red-50 text-red-500 px-6 py-2.5 rounded-xl text-xs font-black flex items-center gap-2 hover:bg-red-500 hover:text-white transition"><Trash2 size={16}/> 批量删除 ({selectedIds.length})</button>}
-          <div className="relative"><Search className="absolute left-3 top-2.5 text-slate-400" size={16}/><input placeholder="搜索产品..." className="bg-white border-slate-200 rounded-xl pl-10 p-2 text-xs w-64 outline-none" /></div>
-        </div>
-      </div>
-      <div className="divide-y divide-slate-50">
-        {[1,2,3,4,5].map(i => (
-          <div key={i} className="p-8 flex items-center gap-8 hover:bg-slate-50/50 transition">
-            <input type="checkbox" className="w-5 h-5 rounded border-slate-300" />
-            <div className="flex-1">
-              <h4 className="font-black text-slate-800 mb-1 leading-tight group-hover:text-blue-600 transition cursor-pointer">Marshall Acton III 官方无线蓝牙音箱 - 细分品类：一体式</h4>
-              <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">店铺：Marshall官方旗舰店 | 录入月份：2024-06</p>
-            </div>
-            <div className="text-right">
-              <p className="text-lg font-black italic">¥ 1,899</p>
-              <p className="text-[10px] text-slate-400 font-bold">买家数: 1,480</p>
-            </div>
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-
-  // --- 录入引擎组件 ---
-  const InputView = () => (
-    <div className="max-w-5xl mx-auto py-10 animate-in fade-in">
-      <div className="flex items-center gap-4 mb-10 border-b pb-10">
-        <div className="w-16 h-16 bg-blue-600 rounded-[1.5rem] flex items-center justify-center text-white shadow-xl shadow-blue-100"><FileText size={32}/></div>
-        <div><h2 className="text-3xl font-black italic">数据录入引擎</h2><p className="text-slate-400 font-bold">粘贴生意参谋数据，系统将自动解析并进行云端同步</p></div>
-      </div>
-      <div className="grid grid-cols-3 gap-10">
-        <div className="space-y-6">
-          <div className="bg-white p-6 rounded-3xl border border-slate-100 shadow-sm space-y-4">
-             <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">录入设置</label>
-             <input type="month" className="w-full bg-slate-50 border-none p-4 rounded-xl font-bold" />
-             <select className="w-full bg-slate-50 border-none p-4 rounded-xl font-bold"><option>200-300元</option></select>
-          </div>
-        </div>
-        <div className="col-span-2">
-           <textarea className="w-full h-96 bg-white border border-slate-100 p-8 rounded-[3rem] shadow-sm font-mono text-xs focus:ring-4 ring-blue-500/5 outline-none" placeholder="此处粘贴原始数据..." />
-           <button className="w-full mt-6 bg-slate-900 text-white py-6 rounded-[2rem] font-black italic text-lg shadow-2xl hover:bg-black transition">解析并同步至云端数据库</button>
-        </div>
-      </div>
-    </div>
-  );
-
-  // --- 主渲染逻辑 ---
   return (
-    <div className="min-h-screen bg-[#FDFDFD] flex text-slate-900">
-      <Sidebar />
+    <div className="flex min-h-screen bg-[#FDFDFD] text-slate-900 font-sans antialiased selection:bg-blue-100">
+      
+      {/* --- 左侧导航栏 --- */}
+      <aside className="w-72 bg-white border-r border-slate-100 flex flex-col sticky top-0 h-screen">
+        <div className="p-8 pb-10">
+          <h1 className="text-2xl font-black italic tracking-tighter">HANSANG <span className="text-blue-600 font-normal">AI</span></h1>
+        </div>
+        <nav className="flex-1 px-6 space-y-1 overflow-y-auto">
+          <p className="px-4 text-[10px] font-black text-slate-400 uppercase tracking-widest mb-4">我的品类项目</p>
+          {['电竞类电脑多媒体音箱', 'AI耳机', '黑胶唱片机', '蓝牙音箱'].map(proj => (
+            <button key={proj} onClick={() => setActiveProject(proj)}
+              className={`w-full text-left px-5 py-4 rounded-2xl text-[13px] font-bold transition-all flex items-center justify-between group ${activeProject === proj ? 'bg-slate-900 text-white shadow-xl shadow-slate-200' : 'text-slate-500 hover:bg-slate-50'}`}>
+              {proj} <ChevronRight size={14} className={activeProject === proj ? 'opacity-100' : 'opacity-0'} />
+            </button>
+          ))}
+        </nav>
+        <div className="p-6">
+          <button onClick={() => setActiveView('manage')} className="w-full bg-blue-600 text-white py-4 rounded-2xl font-black text-xs uppercase tracking-widest flex items-center justify-center gap-2 shadow-lg shadow-blue-100">
+            <Plus size={16} strokeWidth={3} /> 新建品类
+          </button>
+        </div>
+      </aside>
+
+      {/* --- 主内容区 --- */}
       <div className="flex-1 flex flex-col">
-        {/* 顶部二级导航 */}
-        <header className="bg-white border-b border-slate-200 px-10 py-6 sticky top-0 z-[60]">
-          <div className="flex justify-between items-center mb-6">
-            <div><h2 className="text-2xl font-black italic">{activeProject}</h2></div>
+        <header className="bg-white/80 backdrop-blur-md border-b border-slate-50 px-10 pt-10 sticky top-0 z-[100]">
+          <div className="flex justify-between items-start mb-8">
+            <div>
+              <h2 className="text-3xl font-black italic">{activeProject}</h2>
+              <div className="flex gap-4 mt-3"><span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest italic">Hansang Decision Intelligence</span></div>
+            </div>
             <div className="flex gap-3">
-              <button onClick={() => setView('analytics')} className={`px-5 py-2 rounded-xl text-xs font-black transition ${view === 'analytics' ? 'bg-blue-600 text-white shadow-lg shadow-blue-100' : 'bg-slate-50 text-slate-400'}`}>大盘透视</button>
-              <button onClick={() => setView('finance')} className={`px-5 py-2 rounded-xl text-xs font-black transition ${view === 'finance' ? 'bg-blue-600 text-white shadow-lg shadow-blue-100' : 'bg-slate-50 text-slate-400'}`}>财务决策</button>
-              <button onClick={() => setView('dataManage')} className={`px-5 py-2 rounded-xl text-xs font-black transition ${view === 'dataManage' ? 'bg-blue-600 text-white shadow-lg shadow-blue-100' : 'bg-slate-50 text-slate-400'}`}>管理中心</button>
+              <button onClick={() => setActiveView('input')} className="p-3 bg-slate-50 rounded-xl text-slate-400 hover:bg-blue-600 hover:text-white transition"><Database size={20}/></button>
+              <button onClick={saveToCloud} className="bg-slate-900 text-white px-6 py-3 rounded-2xl font-black text-xs uppercase tracking-widest shadow-xl flex items-center gap-2"><Save size={14}/> 保存测算结果</button>
             </div>
           </div>
-          {view === 'analytics' && (
-            <div className="flex gap-8">
-              {['市场大盘', '竞争分析', '细分品类', '汇总统计', '管理'].map(t => (
-                <button key={t} onClick={() => setActiveTab(t)} className={`text-sm font-black pb-2 transition-all border-b-4 ${activeTab === t ? 'border-blue-600 text-blue-600' : 'border-transparent text-slate-300'}`}>{t}</button>
-              ))}
-            </div>
-          )}
+          
+          <div className="flex gap-10">
+            {['市场大盘', '竞争分析', '细分品类', '汇总统计', '管理'].map(tab => (
+              <button key={tab} onClick={() => {setActiveTab(tab); setActiveView('analytics');}}
+                className={`pb-5 text-sm font-black transition-all border-b-[3px] ${activeTab === tab && activeView === 'analytics' ? 'border-blue-600 text-blue-600' : 'border-transparent text-slate-300 hover:text-slate-600'}`}>
+                {tab}
+              </button>
+            ))}
+            <button onClick={() => setActiveView('project')} className={`pb-5 text-sm font-black transition-all border-b-[3px] ${activeView === 'project' ? 'border-blue-600 text-blue-600' : 'border-transparent text-slate-300'}`}>项目决策模型</button>
+          </div>
         </header>
 
-        {/* 主内容区 */}
         <main className="p-10">
-          {view === 'analytics' && activeTab === '市场大盘' && <AnalyticsView />}
-          {view === 'finance' && <FinanceView />}
-          {view === 'dataManage' && <DataManageView />}
-          {view === 'input' && <InputView />}
+          
+          {/* 1. 市场大盘 - 还原图表与同比增长卡片 */}
+          {activeView === 'analytics' && activeTab === '市场大盘' && (
+            <div className="space-y-8 animate-in fade-in duration-500">
+               <div className="bg-white p-5 rounded-[2rem] border border-slate-100 shadow-sm flex items-end gap-6 overflow-x-auto">
+                {['开始月份', '结束月份', '价格区间', '细分品类'].map(f => (
+                  <div key={f} className="min-w-[150px]">
+                    <label className="text-[10px] font-black text-slate-300 uppercase block mb-2">{f}</label>
+                    <div className="bg-slate-50 border border-slate-100 rounded-xl p-3 text-[11px] font-bold text-slate-600 flex justify-between items-center cursor-pointer">全部 <Filter size={12}/></div>
+                  </div>
+                ))}
+              </div>
+              <div className="grid grid-cols-4 gap-6">
+                {[
+                  {t: '销售额', v: '¥ 4.2亿', g: '+29.1%'},
+                  {t: '购买人数', v: '128.4万', g: '-2.4%'},
+                  {t: '转化率', v: '3.42%', g: '+1.2%'},
+                  {t: '平均客单价', v: '¥ 328', g: '+15.8%'},
+                ].map(s => (
+                  <div key={s.t} className="bg-white p-8 rounded-[2.5rem] border border-slate-50 shadow-sm">
+                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-4">{s.t}趋势</p>
+                    <div className="flex justify-between items-end"><h4 className="text-3xl font-black italic tracking-tighter">{s.v}</h4><span className={`text-xs font-black ${s.g.startsWith('+') ? 'text-green-500' : 'text-red-500'}`}>{s.g}</span></div>
+                    <div className="h-12 mt-6 bg-slate-50 rounded-lg animate-pulse" />
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* 2. 汇总统计 - 进度条占比还原 */}
+          {activeView === 'analytics' && activeTab === '汇总统计' && (
+             <div className="bg-white rounded-[3rem] border border-slate-50 shadow-sm overflow-hidden">
+                <div className="p-8 border-b flex justify-between items-center">
+                   <div className="flex gap-2 bg-slate-100 p-1 rounded-xl">
+                      <button onClick={()=>setSummaryView('category')} className={`px-4 py-2 rounded-lg text-xs font-black ${summaryView==='category'?'bg-white text-blue-600 shadow-sm':'text-slate-400'}`}>品类汇总</button>
+                      <button onClick={()=>setSummaryView('price')} className={`px-4 py-2 rounded-lg text-xs font-black ${summaryView==='price'?'bg-white text-blue-600 shadow-sm':'text-slate-400'}`}>价格汇总</button>
+                   </div>
+                </div>
+                <table className="w-full text-left">
+                  <thead className="bg-slate-50/50 text-[10px] font-black text-slate-400 uppercase tracking-widest">
+                    <tr><th className="px-10 py-6">维度</th><th className="px-10 py-6">销售额</th><th className="px-10 py-6">占比</th><th className="px-10 py-6">转化率</th></tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-50">
+                    {categories.map((cat, i) => (
+                      <tr key={cat} className="hover:bg-slate-50/50 transition font-black">
+                        <td className="px-10 py-6 italic">{cat}</td>
+                        <td className="px-10 py-6 text-slate-500">¥ 2,450,000</td>
+                        <td className="px-10 py-6">
+                           <div className="flex items-center gap-3">
+                              <div className="w-40 h-2 bg-slate-100 rounded-full overflow-hidden"><div className="h-full bg-blue-600" style={{width: `${80-i*20}%`}}></div></div>
+                              <span className="text-[11px]">{80-i*20}%</span>
+                           </div>
+                        </td>
+                        <td className="px-10 py-6 text-blue-600">4.5%</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+             </div>
+          )}
+
+          {/* 3. 财务决策 - 黑色卡片+公式绑定像素复刻 */}
+          {activeView === 'project' && (
+            <div className="flex flex-col lg:flex-row gap-10 animate-in slide-in-from-right-4">
+              <div className="flex-1 space-y-8">
+                <section className="bg-white p-10 rounded-[3.5rem] border border-slate-50 shadow-sm">
+                  <h3 className="text-lg font-black italic mb-10 flex items-center gap-3"><Target className="text-blue-600" size={24}/> 市场与销售预估</h3>
+                  <div className="grid grid-cols-2 gap-10">
+                    {['taoShare', 'projectShare', 'price', 'lifecycle'].map(key => (
+                      <div key={key}>
+                        <label className="text-[10px] font-black text-slate-400 uppercase block mb-3">{key === 'price' ? '建议售价 (元)' : key}</label>
+                        <input type="number" value={(fm as any)[key]} onChange={e=>setFm({...fm, [key]: Number(e.target.value)})} className="w-full bg-slate-50 border-none rounded-2xl p-4 font-black focus:ring-4 ring-blue-500/5 outline-none" />
+                      </div>
+                    ))}
+                  </div>
+                </section>
+                <section className="bg-white p-10 rounded-[3.5rem] border border-slate-50 shadow-sm">
+                  <h3 className="text-lg font-black italic mb-10 flex items-center gap-3"><DollarSign className="text-blue-600" size={24}/> 投资与运营成本</h3>
+                  <div className="grid grid-cols-2 gap-10">
+                    <div>
+                      <label className="text-[10px] font-black text-slate-400 uppercase block mb-3">BOM 核心成本 (元)</label>
+                      <input type="number" value={fm.bom} onChange={e=>setFm({...fm, bom: Number(e.target.value)})} className="w-full bg-slate-50 border-none rounded-2xl p-4 font-black text-red-500" />
+                    </div>
+                    <div>
+                       <label className="text-[10px] font-black text-slate-400 uppercase block mb-3">制造成本模式</label>
+                       <div className="flex gap-2 bg-slate-50 p-1 rounded-xl">
+                          <button onClick={()=>setFm({...fm, mfgType:'ratio'})} className={`flex-1 py-2 rounded-lg text-[10px] font-black ${fm.mfgType==='ratio'?'bg-white shadow-sm text-blue-600':'text-slate-400'}`}>比例估算</button>
+                          <button onClick={()=>setFm({...fm, mfgType:'fixed'})} className={`flex-1 py-2 rounded-lg text-[10px] font-black ${fm.mfgType==='fixed'?'bg-white shadow-sm text-blue-600':'text-slate-400'}`}>经验固定值</button>
+                       </div>
+                    </div>
+                  </div>
+                </section>
+              </div>
+
+              {/* 右侧黑色清单 - 精准复刻颜色方案 */}
+              <div className="w-full lg:w-[500px]">
+                <div className="bg-[#0F172A] text-white p-12 rounded-[4rem] shadow-2xl sticky top-24">
+                  <h3 className="text-xl font-black italic border-b border-white/5 pb-8 mb-10 uppercase flex justify-between items-center tracking-tighter">Financial ROI Analysis <Calculator className="text-blue-500" size={20}/></h3>
+                  
+                  <div className="space-y-6 mb-12">
+                    <div className="flex justify-between text-[11px] font-bold text-slate-500 uppercase tracking-widest"><span>预估总销量</span><span className="text-white">{Math.round(finance.totalQtyLC).toLocaleString()} 台</span></div>
+                    <div className="flex justify-between text-[11px] font-bold text-slate-500 uppercase tracking-widest"><span>预估年营收额</span><span className="text-white">¥ {(finance.totalRev / (fm.lifecycle/12)).toLocaleString()}</span></div>
+                  </div>
+
+                  <div className="space-y-8">
+                    <div className="flex justify-between items-end border-b border-white/5 pb-8">
+                      <span className="text-xs font-black text-slate-400 uppercase">单台毛利润 (UVP)</span>
+                      <span className="text-4xl font-black italic text-green-400">¥ {finance.unitGross.toFixed(2)}</span>
+                    </div>
+                    <div className="flex justify-between items-end border-b border-white/5 pb-8">
+                      <span className="text-xs font-black text-slate-400 uppercase">毛利率</span>
+                      <span className="text-4xl font-black italic text-green-400">{finance.grossRate.toFixed(1)}%</span>
+                    </div>
+                    <div className="pt-4">
+                      <p className="text-[10px] font-black text-slate-500 uppercase tracking-[0.2em] mb-4">最终净利率预估 (NET PROFIT MARGIN)</p>
+                      <div className="text-[85px] font-black italic tracking-tighter leading-none text-blue-500">
+                        {finance.netRate.toFixed(1)}<span className="text-2xl font-black ml-1">%</span>
+                      </div>
+                    </div>
+                  </div>
+                  <button onClick={saveToCloud} className="w-full mt-14 bg-blue-600 text-white py-6 rounded-[2.5rem] font-black text-lg shadow-xl shadow-blue-500/20 hover:bg-blue-700 transition transform active:scale-95">同步数据至 Supabase 云端库</button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* 4. 数据录入 - 带自动解析功能 */}
+          {activeView === 'input' && (
+            <div className="max-w-5xl mx-auto py-10 animate-in fade-in">
+              <div className="flex items-center gap-6 mb-12">
+                <div className="p-6 bg-blue-600 rounded-[2rem] text-white shadow-xl shadow-blue-100"><FileText size={40}/></div>
+                <div><h2 className="text-4xl font-black italic uppercase">Parsing Engine</h2><p className="text-slate-400 font-bold mt-1">自动处理“万/区间/百分比”数据</p></div>
+              </div>
+              <div className="bg-white p-12 rounded-[4rem] border border-slate-100 shadow-sm">
+                <textarea value={rawText} onChange={(e)=>setRawText(e.target.value)}
+                  className="w-full h-96 bg-slate-50 border-none rounded-[2.5rem] p-10 text-sm font-mono outline-none ring-offset-4 focus:ring-4 ring-blue-500/5 mb-8"
+                  placeholder="粘贴生意参谋原始文本数据..."
+                />
+                <button onClick={processRawData} className="w-full bg-slate-900 text-white py-7 rounded-[2.5rem] font-black text-2xl italic flex items-center justify-center gap-4 hover:bg-black transition shadow-2xl shadow-slate-200"><Play fill="white" size={24}/> 解析并同步数据</button>
+              </div>
+            </div>
+          )}
         </main>
       </div>
     </div>
